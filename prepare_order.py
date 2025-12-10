@@ -102,10 +102,162 @@ f.	Agregar productos: Utilizar la instancia la clase 'Order', del paso c y llama
 
 """
 #Write your code here
+import pandas as pd
+from datetime import datetime
+
 from users import *
+from util import *
+from products import *
+from orders import *
 
     
 class PrepareOrder:
- #Write your code here
- pass
+    """
+    Clase principal que integra la lectura de datos, la búsqueda de usuarios y 
+    productos y la creación de órdenes
 
+    Atributos:
+        Lista de todos los cajeros disponibles (cashiers)
+        Lista de todos los compradores disponibles (consumers)
+        Lista de todos los productos disponibles (products)
+    """
+    def __init__(self):
+        self.cashiers = self.load_cashier_list()
+        self.customers = self.load_customer_list()
+        self.products = self.load_product_list()
+
+    def load_cashier_list(self) -> list[Cashier]:
+        """
+        Lee el CSV de cajeros y lo convierte en una lista de objetos tipo Cashier
+        Imprime la descripción de todos los cajeros disponibles.
+        """
+        df_cashiers = CSVFileManager("data/cashiers.csv").read()
+        cashier_converter = CashierConverter()
+        cashier_list = cashier_converter.convert(df_cashiers)
+        cashier_converter.print(cashier_list)
+        return cashier_list
+    
+    def load_customer_list(self) -> list[Customer]:
+        """
+        Lee el CSV de compradores y lo convierte en una lista de objetos tipo Customer
+        Imprime la descripción de todos los compradores diponibles.
+        """
+        df_customers = CSVFileManager("data/customers.csv").read()
+        customer_converter = CustomerConverter()
+        customer_list = customer_converter.convert(df_customers)
+        customer_converter.print(customer_list)
+        return customer_list
+  
+    def load_product_list(self) -> list[Product]:
+        """
+        Lee los distintos CSV de productos (drinks, hamburgers, happyMeal y sodas)
+        y los integra en una sola lista de objetos tipo Product.
+        Imprime la descripción de todos los productos disponibles
+        """
+        df_drinks = CSVFileManager("data/drinks.csv").read()
+        df_hamburgers = CSVFileManager("data/hamburgers.csv").read()
+        df_happyMeal = CSVFileManager("data/happyMeal.csv").read()
+        df_sodas = CSVFileManager("data/sodas.csv").read()
+
+        product_converter = ProductConverter()
+        product_list = (product_converter.convert(df_drinks, "Drink") +
+                        product_converter.convert(df_hamburgers, "Hamburguesa") +
+                        product_converter.convert(df_happyMeal, "HappyMeal") +
+                        product_converter.convert(df_sodas, "Soda"))
+        product_converter.print(product_list)
+        return product_list
+    
+    def ask_for_cashier(self) -> Cashier:
+        """Pide por teclado el DNI del cajero hasta que coincida con un cajero existente"""
+        while True:
+            dni = input("Introduce DNI cashier: ")
+            cashier = self.find_cashier(dni)
+            if cashier is not None:
+                print(cashier.describe())
+                return cashier
+            print("Cashier not found. Try again.")
+
+
+    def find_cashier(self, dni: str ) -> Cashier:
+        """Devuelve el cajero con el DNI indicado (dni), o None si no existe"""
+        for cashier in self.cashiers:
+             if str(cashier.dni) == dni:
+                return cashier
+
+    def ask_for_customer(self) -> Customer:
+        """Pide por teclado el DNI del cliente hasta que encuentre uno que este en la lista existente"""  
+        while True:
+            dni = input("Introduce DNI customer: ")
+            customer = self.find_customer(dni)
+            if customer is not None:
+                print(customer.describe())
+                return customer 
+            print("Customer not found. Try again.")   
+        
+    def find_customer(self, dni: str) -> Customer:
+        """Devuelve el Customer con el DNI indicado, o None si no existe"""
+        for customer in self.customers:
+            if str(customer.dni) == dni:
+                return customer
+
+    def find_product(self, product_id: str) -> Product:
+        """Devuelve el Product con el ID indicado, o None si no existe"""
+        for product in self.products:
+            if str(product.id) == product_id:
+                return product  
+
+    def show_products(self):
+        """Musestra por pantalla todos los productos disponibles"""
+        print("Product list:")
+        for product in self.products:
+            print(product.describe())
+
+    def select_products(self) -> list[Product]:
+        """
+        Permite al usuario seleccionar productos por ID
+        
+        Pregunta por un ID de producto, lo busca y, si existe, lo añade a 
+        la selección existente. Se detiene cuando el usuario responde que 
+        no quiere añadir más productos
+        """
+        selected_products = []
+        while True:
+            product_id = input("Introduce product ID: ")
+            product = self.find_product(product_id)
+            if product is not None:
+                print(product.describe())
+                selected_products.append(product)
+            else:
+                print("Product not found.")
+            if input("Do you want to add another product (yes/no)? ").lower() != "yes":
+                break
+        return selected_products
+            
+    def prepare_order(self):
+        """
+        Flujo principal para preparar una orden:
+
+        - Muestra los productos
+        - Pide cajero y cliente
+        - Permite seleccionar productos
+        - Crea la orden, la muestra por pantalla y la guarda en un CSV
+        """
+        self.show_products() #Muestra todos los productos disponibles por pantalla
+        cashier = self.ask_for_cashier() #Busca cajero pedido por pantalla (si no existe vuelve a pedirlo)
+        customer = self.ask_for_customer() #Busca cliente pedido por pantalla (si no existe vuelve a pedirlo)
+
+        order = Order(cashier, customer) #Crea la orden con el cajero y el cliente seleccionados
+
+        product_list = self.select_products() #Selecciona los productos que van a formar parte de la orden
+        for product in product_list:
+            order.add(product) #Añade los productos a la orden
+
+        order.show() #Muestra la información de la orden por pantalla
+
+        #Guarda la información de la orden al final de orders.csv
+        CSVFileManager("orders.csv").write(pd.DataFrame([{"DNI cajero": cashier.dni,
+                                                        "DNI comprador": customer.dni,
+                                                        "Fecha y hora": datetime.now(),
+                                                        "Total": order.calculateTotal()}]))
+
+PrepareOrder().prepare_order()
